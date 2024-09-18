@@ -1,0 +1,23 @@
+version: "3"
+
+services:
+  myfinances_django:
+    restart: always
+    build:
+      context: .
+      dockerfile: ./infrastructure/backend/Dockerfile
+    ports:
+      - '9012:9012'
+    volumes:
+      - .:/myfinances
+    environment:
+      SECRET_KEY: "some!random!secret!key!use!online!generator!to!get"
+      URL: "127.0.0.1"
+      PROXY_IP: "localhost"
+      BRANCH: "debug"
+      DEBUG: "true"
+      DATABASE_TYPE: "sqlite3"
+      SITE_URL: "http://myfinances.example.com"
+      SITE_NAME: "myfinances"
+      AWS_SCHEDULES_ACCESS_KEY_ID: "test"
+      AWS_SCHEDULES_SECRET_ACCESS_KEY: "test"

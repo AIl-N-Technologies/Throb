@@ -1,0 +1,14 @@
+{% extends base|default:"base/base.html" %}
+{% block content %}
+    <div class="card bg-base-100 p-6 mb-4">
+        {% include 'pages/settings/settings/sessions.html' %}
+        <div class="w-full grid grid-cols-1 xl:grid-cols-2 xl:gap-4">
+            {% include 'pages/settings/settings/preferences.html' %}
+            {% include 'pages/settings/settings/profile_settings.html' %}
+        </div>
+        {% include 'pages/settings/settings/danger_zone.html' %}
+    </div>
+    {% if request.user.is_superuser %}
+        <div class="card bg-base-100 p-6 mb-4">{% include 'pages/settings/settings/admin.html' %}</div>
+    {% endif %}
+{% endblock content %}
