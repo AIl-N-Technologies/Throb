@@ -1,0 +1,93 @@
+name: Deploy Release to ECR
+on:
+  #  release:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: # Allows me to manually call
+    inputs:
+      version:
+        type: string
+        description: Version
+        required: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # These permissions are needed to interact with GitHub's OIDC Token endpoint.
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+
+      - name: Set version
+        id: set_version
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            echo "::set-output name=version::${GITHUB_REF#refs/tags/}"
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "::set-output name=version::${{ github.event.inputs.version }}"
+          fi
+
+      #----------------------------------------------
+      #       build Frontend files
+      #----------------------------------------------
+      - name: Build frontend
+        run: |
+          npm ci
+          npm run tailwind-build
+          npm run webpack-build
+
+          if [ -f frontend/static/src/output.css ]; then
+            echo "output.css is created"
+          else
+            echo "output.css is not created"
+            exit 1
+          fi
+          if [ -d frontend/static/js/c/ ]; then
+            echo "webpack has been built"
+          else
+            echo "frontend/static/js/c/ was not created from webpack build"
+            exit 1
+          fi
+          if [ -f webpack-stats.json ]; then
+            echo "webpack has built webpack-stats to work with chunks"
+          else
+            echo "webpack-stats was not built so cannot work with chunks"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        id: aws-credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          #          role-to-assume: ${{ secrets.AWS_ASSUME_ROLE_ARN }}
+          aws-region: "us-east-1"
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ steps.set_version.outputs.version }} #${{ github.sha }}
+        run: |
+          cp infrastructure/backend/Dockerfile ./Dockerfile
+          echo "VERSION IS: ${{ steps.set_version.outputs.version }} or $IMAGE_TAG"
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "::set-output name=latest_image::$ECR_REGISTRY/$ECR_REPOSITORY:latest"
